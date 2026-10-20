@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
 import android.os.Build
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import com.shilapi.xcertplay.adb.AdbKeys
 import com.shilapi.xcertplay.adb.LocalAdb
 import com.shilapi.xcertplay.orchestration.ManualHotspotBand
@@ -120,7 +121,7 @@ object CarHotspotConfigWrite {
     }
 
     private fun writeWithApp(context: Context, credentials: HotspotCredentials, log: (String) -> Unit): WriteOutcome {
-        val wifi = context.applicationContext.getSystemService(WifiManager::class.java)
+        val wifi = context.applicationContext.getSystemServiceCompat<WifiManager>()
             ?: return WriteOutcome(Result.FAILED).also { log("car hotspot config: no Wi-Fi manager") }
         val managerType = WifiManager::class.java
         return writeApp(credentials,

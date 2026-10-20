@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DiPlay Legacy</string>
+    <string name="status_waiting">Waiting for iPhone USB…</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_running">CarPlay active</string>
+    <string name="status_error">Error: %s</string>
+</resources>

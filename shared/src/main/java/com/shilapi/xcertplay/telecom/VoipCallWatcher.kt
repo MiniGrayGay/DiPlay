@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.media.AudioRecordingConfiguration
 import android.media.MediaRecorder
 import android.os.Build
@@ -24,7 +25,7 @@ import androidx.annotation.RequiresApi
  */
 @RequiresApi(Build.VERSION_CODES.O)
 internal class VoipCallWatcher(context: Context, private val onChange: (Boolean) -> Unit) {
-    private val audio = context.applicationContext.getSystemService(AudioManager::class.java)
+    private val audio = context.applicationContext.getSystemServiceCompat<AudioManager>()
     private val handler = Handler(Looper.getMainLooper())
     private var recordingSources = emptyList<Int>()
     private var playbackUsages = emptyList<Int>()

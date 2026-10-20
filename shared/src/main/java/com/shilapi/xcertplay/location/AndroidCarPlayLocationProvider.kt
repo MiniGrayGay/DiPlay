@@ -6,6 +6,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
@@ -23,8 +24,8 @@ class AndroidCarPlayLocationProvider(
     context: Context,
     private val preferredLocationAgeMillis: Long = DEFAULT_PREFERRED_LOCATION_AGE_MILLIS,
 ) : Iap2LocationProvider {
-    private val locationManager =
-        context.applicationContext.getSystemService(LocationManager::class.java)
+    private val locationManager: LocationManager =
+        context.applicationContext.getSystemServiceCompat<LocationManager>()!!
     private val stateLock = Any()
     private val preferredProviders = buildList {
         add(LocationManager.GPS_PROVIDER)

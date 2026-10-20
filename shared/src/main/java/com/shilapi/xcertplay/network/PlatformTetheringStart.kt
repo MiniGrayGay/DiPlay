@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.network
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Build
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.os.IBinder
 import android.os.ResultReceiver
 import java.lang.reflect.InvocationTargetException
@@ -110,7 +111,7 @@ internal object PlatformTetheringStart {
 
     private fun connectivityService(context: Context, failures: MutableList<String>): Any? {
         // ServiceManager is only the way around a field that cannot be read; an empty field means no service.
-        val manager = context.getSystemService(ConnectivityManager::class.java)
+        val manager = context.getSystemServiceCompat<ConnectivityManager>()
         try {
             val service = ConnectivityManager::class.java.getDeclaredField("mService")
                 .apply { isAccessible = true }.get(manager)

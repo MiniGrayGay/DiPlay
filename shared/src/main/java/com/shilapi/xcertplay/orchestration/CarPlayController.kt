@@ -16,6 +16,7 @@ import android.content.pm.PackageManager
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -187,9 +188,9 @@ class CarPlayController(
     private val appContext = context.applicationContext
     private val diagnosticAttempt = diagnosticAttempts.incrementAndGet()
     private val diagnosticRun = AtomicInteger()
-    private val usbManager: UsbManager? = context.getSystemService(UsbManager::class.java)
+    private val usbManager: UsbManager? = context.getSystemServiceCompat<UsbManager>()
     private fun currentBluetoothAdapter(): BluetoothAdapter? =
-        runCatching { appContext.getSystemService(BluetoothManager::class.java)?.adapter }
+        runCatching { appContext.getSystemServiceCompat<BluetoothManager>()?.adapter }
             .getOrNull() ?: runCatching { BluetoothAdapter.getDefaultAdapter() }.getOrNull()
 
     private fun awaitBluetoothEnabled(adapter: BluetoothAdapter, timeoutMillis: Long = 3_000L): Boolean {
@@ -877,7 +878,8 @@ class CarPlayController(
         availabilityPollGeneration.incrementAndGet()
         phase = Phase.MFI
         onStatus(CarPlayStatus.DiscoveringMfi)
-        val offlineDirectory = java.io.File(appContext.noBackupFilesDir, LocalMfiAuthenticationClient.DIRECTORY)
+        val baseDir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) appContext.noBackupFilesDir else appContext.filesDir
+        val offlineDirectory = java.io.File(baseDir, LocalMfiAuthenticationClient.DIRECTORY)
         when (config.mfiTarget) {
             MfiTarget.LOCAL -> openLocalMfi(offlineDirectory)
             MfiTarget.USB_CH341 -> {

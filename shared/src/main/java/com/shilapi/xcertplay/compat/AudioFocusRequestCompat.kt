@@ -9,18 +9,23 @@ import android.os.Looper
 
 /**
  * One audio focus request that works on every supported Android version.
- * API 26+ uses [AudioFocusRequest]. Android 7.x uses the stream-based calls, whose callbacks are
- * moved to [handler] so that both paths deliver them on the same thread.
+ * API 26+ uses [AudioFocusRequest]. API 21-25 uses the stream-based calls with [AudioAttributes].
+ * API < 21 uses stream-based calls with a plain stream type; [attributes] is unused there.
+ * Callbacks are moved to [handler] so that all paths deliver them on the same thread.
  */
 class AudioFocusRequestCompat(
     val gain: Int,
-    val attributes: AudioAttributes,
+    val attributes: AudioAttributes?,
+    private val legacyStreamType: Int,
     private val listener: AudioManager.OnAudioFocusChangeListener,
     private val handler: Handler,
 ) {
+    constructor(gain: Int, attributes: AudioAttributes, listener: AudioManager.OnAudioFocusChangeListener, handler: Handler) :
+        this(gain, attributes, if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) legacyStreamType(attributes.usage) else AudioManager.STREAM_MUSIC, listener, handler)
+
     private val platformRequest: Any? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         AudioFocusRequest.Builder(gain)
-            .setAudioAttributes(attributes)
+            .setAudioAttributes(attributes!!)
             .setOnAudioFocusChangeListener(listener, handler)
             .build()
     } else {
@@ -37,7 +42,7 @@ class AudioFocusRequestCompat(
             manager.requestAudioFocus(platformRequest as AudioFocusRequest)
         } else {
             @Suppress("DEPRECATION")
-            manager.requestAudioFocus(legacyListener, legacyStreamType(attributes.usage), gain)
+            manager.requestAudioFocus(legacyListener, legacyStreamType, gain)
         }
 
     fun abandon(manager: AudioManager): Int =
@@ -49,12 +54,16 @@ class AudioFocusRequestCompat(
         }
 
     internal companion object {
-        /** The stream Android 7.x derives from these usages for its own focus bookkeeping. */
         fun legacyStreamType(usage: Int): Int = when (usage) {
             AudioAttributes.USAGE_VOICE_COMMUNICATION -> AudioManager.STREAM_VOICE_CALL
             AudioAttributes.USAGE_ALARM -> AudioManager.STREAM_ALARM
             AudioAttributes.USAGE_NOTIFICATION_RINGTONE -> AudioManager.STREAM_RING
             AudioAttributes.USAGE_NOTIFICATION -> AudioManager.STREAM_NOTIFICATION
+            else -> AudioManager.STREAM_MUSIC
+        }
+
+        fun legacyStreamTypeForChannel(channel: com.shilapi.xcertplay.media.AudioChannel): Int = when (channel) {
+            com.shilapi.xcertplay.media.AudioChannel.PHONE -> AudioManager.STREAM_VOICE_CALL
             else -> AudioManager.STREAM_MUSIC
         }
     }

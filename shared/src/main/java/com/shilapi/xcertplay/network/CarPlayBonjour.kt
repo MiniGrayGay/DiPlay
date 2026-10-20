@@ -5,6 +5,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.util.Log
 import com.shilapi.xcertplay.airplay.AirPlayConfig
 import com.shilapi.xcertplay.airplay.AirPlayIdentity
@@ -170,8 +171,8 @@ class CarPlayBonjour(
             "bonjourAddressMismatch=${addressMismatchCount.get()} connectProbes=${probeCount.get()} " +
             "connectProbe2xx=${successfulProbeCount.get()} lastProbe=${lastProbe.get()} " +
             "mdnsFamilies=$publishedFamilies"
-    private val multicastLock = (context.applicationContext ?: context)
-        .getSystemService(WifiManager::class.java)
+    private val multicastLock = ((context.applicationContext ?: context)
+        .getSystemServiceCompat<WifiManager>()!!)
         .createMulticastLock("carplay-bonjour").apply { setReferenceCounted(false) }
 
     private var started = false

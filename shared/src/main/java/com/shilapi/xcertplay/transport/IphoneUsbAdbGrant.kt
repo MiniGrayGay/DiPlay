@@ -5,6 +5,7 @@ import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.os.IBinder
 import android.os.Process
 import com.shilapi.xcertplay.adb.AdbKeys
@@ -138,7 +139,7 @@ object IphoneUsbGrantTool {
             )) {
             return IphoneUsbAdbGrant.Result(IphoneUsbAdbGrant.Code.DENIED)
         }
-        val usb = context.getSystemService(UsbManager::class.java)
+        val usb = context.getSystemServiceCompat<UsbManager>()
             ?: return IphoneUsbAdbGrant.Result(IphoneUsbAdbGrant.Code.UNSUPPORTED)
         val devices = usb.deviceList.values
             .filter { it.vendorId == vendorId && it.productId == productId }

@@ -24,6 +24,8 @@ import com.shilapi.xcertplay.airplay.MicrophoneConfig
 import com.shilapi.xcertplay.airplay.VideoCodec
 import com.shilapi.xcertplay.airplay.toHexString
 import com.shilapi.xcertplay.compat.AudioFocusRequestCompat
+import com.shilapi.xcertplay.compat.MediaCodecCompat
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import com.shilapi.xcertplay.hud.BydBluetoothSuspend
 import java.io.Closeable
 import java.nio.ByteBuffer
@@ -36,7 +38,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 
 /** AudioTrack's attributes getter is only available from Android 10. */
-internal fun audioTrackAttributesForFocus(track: AudioTrack, configured: AudioAttributes): AudioAttributes =
+internal fun audioTrackAttributesForFocus(track: AudioTrack, configured: AudioAttributes?): AudioAttributes? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) track.audioAttributes else configured
 
 /** Owns one focus request for all eligible tracks in a CarPlay sink. */
@@ -46,7 +48,7 @@ internal class AudioFocusCoordinator(
     private val muteMediaOnTransientLoss: Boolean = true,
     private val report: (String) -> Unit = {},
 ) {
-    private data class Entry(val channel: AudioChannel, val attributes: AudioAttributes, var appliedVolume: Float = FULL_VOLUME)
+    private data class Entry(val channel: AudioChannel, val attributes: AudioAttributes?, val streamType: Int, var appliedVolume: Float = FULL_VOLUME)
 
     private val manager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private val active = LinkedHashMap<AudioTrack, Entry>()
@@ -90,9 +92,9 @@ internal class AudioFocusCoordinator(
     }
 
     @Synchronized
-    fun acquire(track: AudioTrack, channel: AudioChannel, attributes: AudioAttributes) {
+    fun acquire(track: AudioTrack, channel: AudioChannel, attributes: AudioAttributes?, streamType: Int) {
         if (closed || !enabled || manager == null || channel == AudioChannel.NAVIGATION) return
-        active[track] = Entry(channel, attributes)
+        active[track] = Entry(channel, attributes, streamType)
         refreshRequest()
         applyMediaVolume(track, active.getValue(track))
     }
@@ -136,7 +138,7 @@ internal class AudioFocusCoordinator(
             AudioChannel.NAVIGATION -> return
         }
         currentListener = listenerFor(focusGeneration)
-        val next = AudioFocusRequestCompat(gain, primary.attributes, currentListener, Handler(Looper.getMainLooper()))
+        val next = AudioFocusRequestCompat(gain, primary.attributes, primary.streamType, currentListener, Handler(Looper.getMainLooper()))
         request = next
         requestedChannel = primary.channel
         val result = manager?.let(next::request)
@@ -224,7 +226,7 @@ class AndroidMediaSink(
     private val callEchoReferences = ConcurrentHashMap<AudioStreamId, EchoReference>()
     private val appContext = context?.applicationContext
     private val ambientSinkToken = AmbientMusicController.openSink(appContext)
-    private val audioManager = appContext?.getSystemService(AudioManager::class.java)
+    private val audioManager = appContext?.getSystemServiceCompat<AudioManager>()
     private val audioFocusCoordinator = AudioFocusCoordinator(
         appContext,
         audioFocusEnabled,
@@ -1406,7 +1408,12 @@ private class VideoDecoder(
                 DetachOutcome.PARKED -> {
                     val consumer = parking ?: ParkingOutput(width, height).also { parking = it }
                     try {
-                        checkNotNull(decoder).setOutputSurface(consumer.surface)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            checkNotNull(decoder).setOutputSurface(consumer.surface)
+                        } else {
+                            // API < 23 cannot redirect output; release and let attach() recreate.
+                            throw UnsupportedOperationException("setOutputSurface unavailable")
+                        }
                         outputSurface = consumer.surface
                         Log.i(TAG, "video decoder parked off screen")
                     } catch (error: Exception) {
@@ -1442,7 +1449,7 @@ private class VideoDecoder(
             return
         }
         val codec = decoder
-        if (codec != null) {
+        if (codec != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 codec.setOutputSurface(surface)
                 Log.i(TAG, "video decoder output surface updated")
@@ -1494,7 +1501,7 @@ private class VideoDecoder(
             recover("video decoder input stalled")
             return
         }
-        val input = checkNotNull(codec.getInputBuffer(index)) { "Decoder input buffer unavailable" }
+        val input = checkNotNull(MediaCodecCompat.getInputBuffer(codec, index)) { "Decoder input buffer unavailable" }
         input.clear()
         if (annexB.size <= input.remaining()) {
             input.put(annexB)
@@ -1968,7 +1975,7 @@ private class AudioRenderer(
         mappedChannel = selection.channel
         val streamOverride = channelOverride(selection.channel)
         actualLegacyStreamType = streamOverride.takeIf { it != 0 }
-        var attributes = audioAttributesFor(selection, streamOverride)
+        var attributes: AudioAttributes? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) audioAttributesFor(selection, streamOverride) else null
         trackAttributes = attributes
         val plan = MediaAudioBuffer.plan(selection.channel == AudioChannel.MEDIA,
             format.sampleRate, format.channels, minBuffer, mediaBufferMillis)
@@ -1976,7 +1983,14 @@ private class AudioRenderer(
         val built: AudioTrack
         var routeLabel: String
         diagnosticStage = "track-build"
-        if (streamOverride == 0) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            // API < 21: AudioTrack.Builder and AudioAttributes are unavailable.
+            val streamType = if (streamOverride != 0) streamOverride else AudioManager.STREAM_MUSIC
+            routeLabel = "streamType=$streamType(legacy)"
+            @Suppress("DEPRECATION")
+            built = AudioTrack(streamType, format.sampleRate, channelMask, encoding,
+                plan.trackBufferBytes, AudioTrack.MODE_STREAM)
+        } else if (streamOverride == 0) {
             attributes = audioAttributesFor(selection)
             routeLabel = "usage"
             built = AudioTrack.Builder()
@@ -2011,7 +2025,7 @@ private class AudioRenderer(
             )
         }
         track = built
-        if (mappedChannel == AudioChannel.PHONE) {
+        if (mappedChannel == AudioChannel.PHONE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val listener = AudioRouting.OnRoutingChangedListener { routing -> checkCallRoute(routing.routedDevice) }
             if (runCatching { built.addOnRoutingChangedListener(listener, Handler(Looper.getMainLooper())) }.isSuccess) {
                 routingListener = listener
@@ -2139,23 +2153,27 @@ private class AudioRenderer(
      */
     private fun requestAudioFocus() {
         val channel = mappedChannel ?: return
-        val attributes = trackAttributes ?: return
         if (channel == AudioChannel.NAVIGATION) {
             Log.i(TAG, "audio focus skipped channel=NAVIGATION; overlays without ducking")
             return
         }
-        track?.let { audioFocusCoordinator.acquire(it, channel, attributes) }
+        val attributes = trackAttributes
+        val streamType = actualLegacyStreamType ?: AudioFocusRequestCompat.legacyStreamTypeForChannel(channel)
+        track?.let { audioFocusCoordinator.acquire(it, channel, attributes, streamType) }
     }
 
     private fun abandonAudioFocus() {
         track?.let(audioFocusCoordinator::release)
     }
 
-    private fun pcmFormat(encoding: Int, channelMask: Int) = AndroidAudioFormat.Builder()
-        .setSampleRate(format.sampleRate)
-        .setChannelMask(channelMask)
-        .setEncoding(encoding)
-        .build()
+    private fun pcmFormat(encoding: Int, channelMask: Int): AndroidAudioFormat {
+        check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) { "pcmFormat needs API 21+" }
+        return AndroidAudioFormat.Builder()
+            .setSampleRate(format.sampleRate)
+            .setChannelMask(channelMask)
+            .setEncoding(encoding)
+            .build()
+    }
 
     private fun streamType(): Int {
         val mode = if (advancedAudioChannelMapping) {
@@ -2294,7 +2312,7 @@ private class AudioRenderer(
             }
             return
         }
-        val input = codec.getInputBuffer(index) ?: return
+        val input = MediaCodecCompat.getInputBuffer(codec, index) ?: return
         input.clear()
         if (payload.size <= input.remaining()) {
             input.put(payload)
@@ -2352,7 +2370,7 @@ private class AudioRenderer(
                     var copied = false
                     try {
                         if (size > 0) {
-                            val output = codec.getOutputBuffer(index)
+                            val output = MediaCodecCompat.getOutputBuffer(codec, index)
                             if (output != null) {
                                 if (size > pcm.size) pcm = ByteArray(size)
                                 output.position(info.offset)

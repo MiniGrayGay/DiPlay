@@ -6,6 +6,7 @@ import android.net.wifi.SoftApConfiguration
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
 import android.os.Build
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.os.Looper
 import android.util.Log
 import com.shilapi.xcertplay.orchestration.ManualHotspotBand
@@ -40,7 +41,7 @@ class ManualHotspotManager(
     private val waitLock = Object()
     private var confirmed: HotspotSelection? = null
     private var lastSampleLog = emptyList<String>()
-    private val wifiManager = appContext.getSystemService(WifiManager::class.java)
+    private val wifiManager = appContext.getSystemServiceCompat<WifiManager>()
         ?: throw IllegalStateException("WifiManager is unavailable")
     private val expectedSsid = ssid
     private val passphrase = passphrase

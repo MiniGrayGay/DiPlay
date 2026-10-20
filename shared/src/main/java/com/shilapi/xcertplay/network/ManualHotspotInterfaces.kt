@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.shilapi.xcertplay.compat.getSystemServiceCompat
 import android.net.TetheringInterface
 import android.net.TetheringManager
 import android.os.Build
@@ -20,7 +21,7 @@ internal class ManualHotspotInterfaces(
     private val onDiagnostic: (String) -> Unit = {},
     private val configuredInterface: String? = null,
 ) : Closeable {
-    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private val connectivity = context.getSystemServiceCompat<ConnectivityManager>()
     private val publicTethering = if (Build.VERSION.SDK_INT >= 36) PublicTethering(context) else null
     private var lastLegacyDiagnostic: String? = null
     private var lastOwnershipDiagnostic: String? = null
