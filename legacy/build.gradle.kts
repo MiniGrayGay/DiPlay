@@ -2,10 +2,23 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val platformKeystoreFile = file("platform.p12")
+
 android {
     namespace = "com.shilapi.xcertplay.legacy"
     compileSdk {
         version = release(37)
+    }
+
+    if (platformKeystoreFile.exists()) {
+        signingConfigs {
+            create("platform") {
+                storeFile = platformKeystoreFile
+                storePassword = "android"
+                keyAlias = "platform"
+                keyPassword = "android"
+            }
+        }
     }
 
     defaultConfig {
@@ -21,8 +34,14 @@ android {
         debug {
             applicationIdSuffix = ".test"
             versionNameSuffix = "-test"
+            if (platformKeystoreFile.exists()) {
+                signingConfig = signingConfigs.getByName("platform")
+            }
         }
         release {
+            if (platformKeystoreFile.exists()) {
+                signingConfig = signingConfigs.getByName("platform")
+            }
             optimization {
                 enable = false
             }
